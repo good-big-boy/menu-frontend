@@ -1,0 +1,15 @@
+{
+  "name": "recipe-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "description": "静态前端页面，用于访问 Recipe 后端 API",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@babel/parser": "^7.29.2"
+  }
+}
