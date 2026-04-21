@@ -2001,6 +2001,16 @@
                                     ))}
                                 </div>
                                 <div className="mt-3 flex gap-2">
+                                    <select
+                                        value={newIngredient}
+                                        onChange={(e) => setNewIngredient(e.target.value)}
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                                    >
+                                        <option value="">选择食材</option>
+                                        {config.ingredients.map(ing => (
+                                            <option key={ing.name} value={ing.name}>{ing.name}</option>
+                                        ))}
+                                    </select>
                                     <input
                                         type="text"
                                         value={newIngredient}
