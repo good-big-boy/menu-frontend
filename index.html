@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>菜谱管理</title>
+    <title>快来吃饭</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -15,7 +15,7 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         const resolveApiBaseUrl = () => {
             if (window.__API_BASE_URL) {
@@ -136,6 +136,55 @@
             }
             return <i className={`fas ${icon} ${className}`}></i>;
         };
+
+        const normalizeStep = (step) => {
+            if (!step) return { title: '', description: '', image: '' };
+            if (typeof step === 'string') {
+                return { title: '', description: step, image: '' };
+            }
+            return {
+                title: step.title || '',
+                description: step.description || '',
+                image: step.image || ''
+            };
+        };
+
+        const resizeImageFile = (file, maxEdge = 1400, quality = 0.82) => new Promise((resolve, reject) => {
+            if (!file || !file.type.startsWith('image/')) {
+                resolve(file);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (Math.max(width, height) > maxEdge) {
+                        const ratio = maxEdge / Math.max(width, height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            resolve(file);
+                            return;
+                        }
+                        const output = new File([blob], file.name, { type: blob.type || 'image/jpeg' });
+                        resolve(output);
+                    }, 'image/jpeg', quality);
+                };
+                img.onerror = reject;
+                img.src = event.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
 
         const App = () => {
             const [page, setPage] = useState('home');
@@ -688,7 +737,7 @@
                                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                                     <i className="fas fa-utensils text-white"></i>
                                 </div>
-                                <h1 className="text-white font-bold">菜谱管理</h1>
+                                <h1 className="text-white font-bold">快来吃饭</h1>
                             </div>
                             <nav className="mt-4">
                                 <div className="px-3 space-y-1">
@@ -882,7 +931,7 @@
                     <div className="lg:hidden min-h-screen bg-gray-50">
                         <header className="bg-gray-900 sticky top-0 z-40">
                             <div className="px-4 py-3 flex items-center justify-between">
-                                <h1 className="text-lg font-bold text-white">菜谱管理</h1>
+                                <h1 className="text-lg font-bold text-white">快来吃饭</h1>
                                 <button onClick={() => setPage('config')} className="p-2 hover:bg-gray-800 rounded-full">
                                     <i className="fas fa-cog text-white text-lg"></i>
                                 </button>
@@ -894,7 +943,7 @@
                                         type="text"
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        placeholder="搜索菜谱管理"
+                                        placeholder="搜索快来吃饭"
                                         className="w-full pl-10 pr-10 py-2.5 bg-white rounded-full text-sm focus:outline-none placeholder-gray-400"
                                     />
                                     {searchQuery && (
@@ -1104,7 +1153,7 @@
                                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                                     <i className="fas fa-utensils text-white"></i>
                                 </div>
-                                <h1 className="text-white font-bold">菜谱管理</h1>
+                                <h1 className="text-white font-bold">快来吃饭</h1>
                             </div>
                             <nav className="mt-4">
                                 <div className="px-3 space-y-1">
@@ -1321,8 +1370,10 @@
             const [cookingMethod, setCookingMethod] = useState('炒');
             const [description, setDescription] = useState('');
             const [ingredients, setIngredients] = useState([]);
+            const [seasonings, setSeasonings] = useState([]);
             const [steps, setSteps] = useState([]);
             const [newIngredient, setNewIngredient] = useState('');
+            const [newSeasoning, setNewSeasoning] = useState('');
             const [newStep, setNewStep] = useState('');
             const [imageFile, setImageFile] = useState(null);
             const [videoFile, setVideoFile] = useState(null);
@@ -1344,11 +1395,9 @@
                     setCookingMethod(editingRecipe.cookingMethod || '炒');
                     setDescription(editingRecipe.description || '');
                     setIngredients(editingRecipe.ingredients || []);
+                    setSeasonings(editingRecipe.seasonings || []);
 
-                    const normalizedSteps = (editingRecipe.steps || []).map(s => ({
-                        description: s.description || '',
-                        image: s.image || null
-                    }));
+                    const normalizedSteps = (editingRecipe.steps || []).map(normalizeStep);
                     setSteps(normalizedSteps);
                     setStepImages(normalizedSteps.map(s => null));
 
@@ -1367,6 +1416,7 @@
                     setCookingMethod('炒');
                     setDescription('');
                     setIngredients([]);
+                    setSeasonings([]);
                     setSteps([]);
                     setImageFile(null);
                     setVideoFile(null);
@@ -1376,14 +1426,15 @@
                 }
             }, [editingRecipe, config]);
 
-            const handleImageUpload = (file) => {
+            const handleImageUpload = async (file) => {
                 if (file && file.type.startsWith('image/')) {
-                    setImageFile(file);
+                    const compressed = await resizeImageFile(file);
+                    setImageFile(compressed);
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         setImagePreview(e.target.result);
                     };
-                    reader.readAsDataURL(file);
+                    reader.readAsDataURL(compressed);
                 }
             };
 
@@ -1421,7 +1472,7 @@
 
             const addStep = () => {
                 if (!newStep.trim()) return;
-                setSteps([...steps, { description: newStep.trim(), image: '' }]);
+                setSteps([...steps, { title: '', description: newStep.trim(), image: '' }]);
                 setStepImages([...stepImages, null]);
                 setNewStep('');
             };
@@ -1433,10 +1484,11 @@
                 setStepImages(newStepImages);
             };
 
-            const handleStepImageUpload = (index, file) => {
+            const handleStepImageUpload = async (index, file) => {
                 if (file && file.type.startsWith('image/')) {
+                    const compressed = await resizeImageFile(file, 1200, 0.8);
                     const newStepImages = [...stepImages];
-                    newStepImages[index] = file;
+                    newStepImages[index] = compressed;
                     setStepImages(newStepImages);
 
                     const reader = new FileReader();
@@ -1445,8 +1497,32 @@
                         newSteps[index].image = e.target.result;
                         setSteps(newSteps);
                     };
-                    reader.readAsDataURL(file);
+                    reader.readAsDataURL(compressed);
                 }
+            };
+
+            const updateStepField = (index, field, value) => {
+                const next = [...steps];
+                next[index] = { ...next[index], [field]: value };
+                setSteps(next);
+            };
+
+            const insertStepBefore = (index) => {
+                const next = [...steps];
+                next.splice(index, 0, { title: '', description: '', image: '' });
+                const nextImages = [...stepImages];
+                nextImages.splice(index, 0, null);
+                setSteps(next);
+                setStepImages(nextImages);
+            };
+
+            const insertStepAfter = (index) => {
+                const next = [...steps];
+                next.splice(index + 1, 0, { title: '', description: '', image: '' });
+                const nextImages = [...stepImages];
+                nextImages.splice(index + 1, 0, null);
+                setSteps(next);
+                setStepImages(nextImages);
             };
 
             const removeStepImage = (index) => {
@@ -1480,6 +1556,7 @@
                 formData.append('description', description);
 
                 formData.append('ingredients', JSON.stringify(ingredients));
+                formData.append('seasonings', JSON.stringify(seasonings));
                 formData.append('steps', JSON.stringify(steps));
 
                 if (imageFile) {
@@ -1531,7 +1608,7 @@
                                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                                     <i className="fas fa-utensils text-white"></i>
                                 </div>
-                                <h1 className="text-white font-bold">菜谱管理</h1>
+                                <h1 className="text-white font-bold">快来吃饭</h1>
                             </div>
                             <nav className="mt-4">
                                 <div className="px-3 space-y-1">
@@ -1654,7 +1731,7 @@
                                                 <label className="block text-sm text-gray-600 mb-2">展示图片（可选）</label>
                                                 {imagePreview ? (
                                                     <div className="relative inline-block">
-                                                        <img src={imagePreview} alt="展示图片" className="h-40 w-auto rounded-lg object-cover" />
+                                                        <img src={imagePreview} alt="展示图片" className="h-40 w-full max-w-xs rounded-lg object-contain bg-gray-100" />
                                                         <button
                                                             onClick={removeImage}
                                                             className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
@@ -1753,6 +1830,42 @@
 
                                     <div className="bg-white rounded-xl shadow-md p-4">
                                         <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                            <i className="fas fa-mortar-pestle text-orange-500"></i>
+                                            调料
+                                        </h2>
+                                        <div className="space-y-2">
+                                            {seasonings.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                                                    <span className="flex-1">{item.name}</span>
+                                                    <button onClick={() => setSeasonings(seasonings.filter((_, i) => i !== idx))} className="p-1 text-red-500 hover:bg-red-100 rounded">
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2 mt-2">
+                                            <input
+                                                type="text"
+                                                value={newSeasoning}
+                                                onChange={(e) => setNewSeasoning(e.target.value)}
+                                                placeholder="输入调料（如：生抽 1勺）"
+                                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            />
+                                            <button
+                                                onClick={() => {
+                                                    if (!newSeasoning.trim()) return;
+                                                    setSeasonings([...seasonings, { name: newSeasoning.trim() }]);
+                                                    setNewSeasoning('');
+                                                }}
+                                                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+                                            >
+                                                <i className="fas fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white rounded-xl shadow-md p-4">
+                                        <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                             <i className="fas fa-list-ol text-orange-500"></i>
                                             烹饪步骤
                                         </h2>
@@ -1763,11 +1876,24 @@
                                                         <span className="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0">
                                                             {idx + 1}
                                                         </span>
-                                                        <div className="flex-1">
-                                                            <p className="text-gray-700 mb-2">{step.description}</p>
+                                                        <div className="flex-1 space-y-2">
+                                                            <input
+                                                                type="text"
+                                                                value={step.title || ''}
+                                                                onChange={(e) => updateStepField(idx, 'title', e.target.value)}
+                                                                placeholder="步骤小标题（可选）"
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                            />
+                                                            <textarea
+                                                                value={step.description || ''}
+                                                                onChange={(e) => updateStepField(idx, 'description', e.target.value)}
+                                                                placeholder="步骤说明"
+                                                                rows={2}
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                                                            />
                                                             {step.image && (
                                                                 <div className="relative inline-block">
-                                                                    <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 object-cover" />
+                                                                    <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 w-full object-contain bg-gray-100" />
                                                                     <button
                                                                         onClick={() => removeStepImage(idx)}
                                                                         className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
@@ -1791,9 +1917,17 @@
                                                                 </label>
                                                             )}
                                                         </div>
-                                                        <button onClick={() => removeStep(idx)} className="p-1 text-red-500 hover:bg-red-100 rounded self-start">
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
+                                                        <div className="flex flex-col gap-1">
+                                                            <button onClick={() => insertStepBefore(idx)} className="p-1 text-gray-600 hover:bg-gray-100 rounded self-start" title="前插一步">
+                                                                <i className="fas fa-arrow-up"></i>
+                                                            </button>
+                                                            <button onClick={() => insertStepAfter(idx)} className="p-1 text-gray-600 hover:bg-gray-100 rounded self-start" title="后加一步">
+                                                                <i className="fas fa-arrow-down"></i>
+                                                            </button>
+                                                            <button onClick={() => removeStep(idx)} className="p-1 text-red-500 hover:bg-red-100 rounded self-start">
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
@@ -1924,7 +2058,7 @@
                                         <label className="block text-sm text-gray-600 mb-2">展示图片（可选）</label>
                                         {imagePreview ? (
                                             <div className="relative inline-block">
-                                                <img src={imagePreview} alt="预览" className="h-40 w-auto rounded-lg object-cover" />
+                                                <img src={imagePreview} alt="预览" className="h-40 w-full rounded-lg object-contain bg-gray-100" />
                                                 <button
                                                     onClick={removeImage}
                                                     className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
@@ -2040,6 +2174,45 @@
 
                             <div className="bg-white rounded-xl shadow-md p-4">
                                 <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                    <i className="fas fa-mortar-pestle text-orange-500"></i>
+                                    调料
+                                </h2>
+                                <div className="space-y-2">
+                                    {seasonings.map((item, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                                            <span className="flex-1 text-sm text-gray-700">{item.name}</span>
+                                            <button
+                                                onClick={() => setSeasonings(seasonings.filter((_, i) => i !== idx))}
+                                                className="w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-200"
+                                            >
+                                                <i className="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-3 flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newSeasoning}
+                                        onChange={(e) => setNewSeasoning(e.target.value)}
+                                        placeholder="例如：盐 2g"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm"
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            if (!newSeasoning.trim()) return;
+                                            setSeasonings([...seasonings, { name: newSeasoning.trim() }]);
+                                            setNewSeasoning('');
+                                        }}
+                                        className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm"
+                                    >
+                                        <i className="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl shadow-md p-4">
+                                <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                     <i className="fas fa-list-ol text-orange-500"></i>
                                     烹饪步骤
                                 </h2>
@@ -2050,11 +2223,24 @@
                                                 <span className="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0">
                                                     {idx + 1}
                                                 </span>
-                                                <div className="flex-1">
-                                                    <p className="text-gray-700 mb-2">{step.description || step}</p>
+                                                <div className="flex-1 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={step.title || ''}
+                                                        onChange={(e) => updateStepField(idx, 'title', e.target.value)}
+                                                        placeholder="步骤小标题（可选）"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                    />
+                                                    <textarea
+                                                        value={step.description || ''}
+                                                        onChange={(e) => updateStepField(idx, 'description', e.target.value)}
+                                                        placeholder="步骤描述"
+                                                        rows={2}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
+                                                    />
                                                     {step.image && (
                                                         <div className="relative inline-block">
-                                                            <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 object-cover" />
+                                                            <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 w-full object-contain bg-gray-100" />
                                                             <button
                                                                 onClick={() => removeStepImage(idx)}
                                                                 className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
@@ -2078,9 +2264,17 @@
                                                         </label>
                                                     )}
                                                 </div>
-                                                <button onClick={() => removeStep(idx)} className="p-1 text-red-500 hover:bg-red-100 rounded self-start">
-                                                    <i className="fas fa-trash"></i>
-                                                </button>
+                                                <div className="flex flex-col gap-1">
+                                                    <button onClick={() => insertStepBefore(idx)} className="p-1 text-gray-600 hover:bg-gray-100 rounded self-start" title="前插一步">
+                                                        <i className="fas fa-arrow-up"></i>
+                                                    </button>
+                                                    <button onClick={() => insertStepAfter(idx)} className="p-1 text-gray-600 hover:bg-gray-100 rounded self-start" title="后加一步">
+                                                        <i className="fas fa-arrow-down"></i>
+                                                    </button>
+                                                    <button onClick={() => removeStep(idx)} className="p-1 text-red-500 hover:bg-red-100 rounded self-start">
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -2093,7 +2287,7 @@
                                         rows={2}
                                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none text-sm"
                                     />
-                                    <button onClick={() => { if (newStep.trim()) { setSteps([...steps, { description: newStep.trim(), image: '' }]); setStepImages([...stepImages, null]); setNewStep(''); } }} className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 self-end">
+                                    <button onClick={() => { if (newStep.trim()) { setSteps([...steps, { title: '', description: newStep.trim(), image: '' }]); setStepImages([...stepImages, null]); setNewStep(''); } }} className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 self-end">
                                         <i className="fas fa-plus"></i>
                                     </button>
                                 </div>
@@ -2118,6 +2312,75 @@
             console.log('page prop:', page);
             console.log('setPage:', setPage);
             console.log('setEditingRecipe:', setEditingRecipe);
+
+            const normalizedSteps = useMemo(() => (recipe?.steps || []).map(normalizeStep), [recipe]);
+            const seasonings = recipe?.seasonings || [];
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [voiceStatus, setVoiceStatus] = useState('');
+            const [jumpStepInput, setJumpStepInput] = useState('');
+            const recognitionRef = useRef(null);
+
+            useEffect(() => {
+                setCurrentStepIndex(0);
+                setJumpStepInput('');
+            }, [recipe?.id]);
+
+            const jumpToStep = (index) => {
+                if (normalizedSteps.length === 0) return;
+                const nextIndex = Math.min(Math.max(index, 0), normalizedSteps.length - 1);
+                setCurrentStepIndex(nextIndex);
+            };
+
+            const parseVoiceStep = (text) => {
+                const normalized = text.replace(/\s+/g, '');
+                const match = normalized.match(/第(\d+)步/);
+                if (match) {
+                    return Number(match[1]) - 1;
+                }
+                return null;
+            };
+
+            const handleVoiceCommand = (text) => {
+                if (!text) return;
+                if (text.includes('上一步')) {
+                    jumpToStep(currentStepIndex - 1);
+                    return;
+                }
+                if (text.includes('下一步')) {
+                    jumpToStep(currentStepIndex + 1);
+                    return;
+                }
+                const stepIndex = parseVoiceStep(text);
+                if (stepIndex !== null) {
+                    jumpToStep(stepIndex);
+                }
+            };
+
+            const startVoiceControl = () => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (!SpeechRecognition) {
+                    alert('当前浏览器不支持语音识别，请使用下方按钮操作步骤。');
+                    return;
+                }
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop();
+                    recognitionRef.current = null;
+                }
+                const recognition = new SpeechRecognition();
+                recognition.lang = 'zh-CN';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+                recognition.onstart = () => setVoiceStatus('语音识别中...');
+                recognition.onresult = (event) => {
+                    const text = event.results?.[0]?.[0]?.transcript || '';
+                    setVoiceStatus(`识别到：${text}`);
+                    handleVoiceCommand(text);
+                };
+                recognition.onerror = () => setVoiceStatus('语音识别失败，请重试');
+                recognition.onend = () => setTimeout(() => setVoiceStatus(''), 1500);
+                recognition.start();
+                recognitionRef.current = recognition;
+            };
 
             const deleteRecipe = async () => {
                 if (confirm('确定要删除这道菜谱吗？')) {
@@ -2183,7 +2446,7 @@
                                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                                     <i className="fas fa-utensils text-white"></i>
                                 </div>
-                                <h1 className="text-white font-bold">菜谱管理</h1>
+                                <h1 className="text-white font-bold">快来吃饭</h1>
                             </div>
                             <nav className="mt-4">
                                 <div className="px-3 space-y-1">
@@ -2270,6 +2533,16 @@
                                                 ) : (
                                                     <p className="text-gray-500 text-sm">暂无食材</p>
                                                 )}
+                                                {seasonings.length > 0 && (
+                                                    <div className="mt-3">
+                                                        <p className="text-xs text-gray-500 mb-2">调料</p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {seasonings.map((item, idx) => (
+                                                                <span key={idx} className="px-3 py-1.5 bg-orange-900/30 text-orange-300 rounded-full text-sm">{item.name}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2277,15 +2550,16 @@
                                         <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
                                             <i className="fas fa-list-ol text-orange-500"></i>烹饪步骤
                                         </h3>
-                                        {recipe.steps && recipe.steps.length > 0 ? (
+                                        {normalizedSteps.length > 0 ? (
                                             <div className="space-y-4">
-                                                {recipe.steps.map((step, idx) => (
-                                                    <div key={idx} className="flex items-start gap-4">
-                                                        <span className="w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0 font-bold">{idx + 1}</span>
+                                                {normalizedSteps.map((step, idx) => (
+                                                    <div key={idx} className={`flex items-start gap-4 rounded-lg p-2 ${idx === currentStepIndex ? 'bg-orange-500/10 border border-orange-500/30' : ''}`}>
+                                                        <span className={`w-8 h-8 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0 font-bold ${idx === currentStepIndex ? 'bg-orange-600' : 'bg-orange-500'}`}>{idx + 1}</span>
                                                         <div className="flex-1">
+                                                            {step.title && <p className="text-orange-300 text-sm mb-1">{step.title}</p>}
                                                             <p className="text-gray-300">{step.description || step}</p>
                                                             {step.image && (
-                                                                <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 object-cover" />
+                                                                <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 w-full object-contain bg-gray-900/40" />
                                                             )}
                                                         </div>
                                                     </div>
@@ -2319,7 +2593,7 @@
 
                         <div className="p-4 max-w-2xl mx-auto space-y-4">
                             {recipe.image && (
-                                <div className="h-64 bg-gray-200 rounded-xl bg-cover bg-center" style={{ backgroundImage: `url(${recipe.image})` }}></div>
+                                <div className="h-64 bg-gray-200 rounded-xl bg-contain bg-no-repeat bg-center" style={{ backgroundImage: `url(${recipe.image})` }}></div>
                             )}
                             {recipe.video && (
                                 <div className="rounded-xl overflow-hidden bg-gray-900">
@@ -2368,6 +2642,16 @@
                                 ) : (
                                     <p className="text-gray-400 text-sm">暂无食材</p>
                                 )}
+                                {seasonings.length > 0 && (
+                                    <div className="mt-3">
+                                        <p className="text-xs text-gray-500 mb-2">调料</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {seasonings.map((item, idx) => (
+                                                <span key={idx} className="px-3 py-1.5 bg-orange-50 text-orange-600 rounded-full text-xs">{item.name}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="bg-white rounded-xl shadow-md p-4">
@@ -2375,17 +2659,18 @@
                                     <i className="fas fa-list-ol text-orange-500"></i>
                                     烹饪步骤
                                 </h2>
-                                {recipe.steps && recipe.steps.length > 0 ? (
+                                {normalizedSteps.length > 0 ? (
                                     <div className="space-y-3">
-                                        {recipe.steps.map((step, idx) => (
-                                            <div key={idx} className="flex items-start gap-3">
-                                                <span className="w-7 h-7 bg-orange-500 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0">
+                                        {normalizedSteps.map((step, idx) => (
+                                            <div key={idx} className={`flex items-start gap-3 rounded-lg p-2 ${idx === currentStepIndex ? 'bg-orange-50 border border-orange-200' : ''}`}>
+                                                <span className={`w-7 h-7 text-white rounded-full flex items-center justify-center text-sm flex-shrink-0 ${idx === currentStepIndex ? 'bg-orange-600' : 'bg-orange-500'}`}>
                                                     {idx + 1}
                                                 </span>
                                                 <div className="flex-1">
+                                                    {step.title && <p className="text-orange-600 text-xs mb-1">{step.title}</p>}
                                                     <p className="text-gray-700">{step.description || step}</p>
                                                     {step.image && (
-                                                        <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 object-cover" />
+                                                        <img src={step.image} alt={`步骤 ${idx + 1}`} className="mt-2 rounded-lg max-h-48 w-full object-contain bg-gray-100" />
                                                     )}
                                                 </div>
                                             </div>
@@ -2395,6 +2680,37 @@
                                     <p className="text-gray-400 text-sm">暂无烹饪步骤</p>
                                 )}
                             </div>
+                            {normalizedSteps.length > 0 && (
+                                <div className="bg-white rounded-xl shadow-md p-4 space-y-3">
+                                    <p className="text-sm font-medium text-gray-700">SOP 步骤控制（可点按或语音）</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={() => jumpToStep(currentStepIndex - 1)} className="py-2 rounded-lg bg-gray-100 text-gray-700">上一步</button>
+                                        <button onClick={() => jumpToStep(currentStepIndex + 1)} className="py-2 rounded-lg bg-orange-500 text-white">下一步</button>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={jumpStepInput}
+                                            onChange={(e) => setJumpStepInput(e.target.value)}
+                                            placeholder="第几步"
+                                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const parsed = Number(jumpStepInput);
+                                                if (!Number.isFinite(parsed)) return;
+                                                jumpToStep(parsed - 1);
+                                            }}
+                                            className="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm"
+                                        >
+                                            跳转
+                                        </button>
+                                    </div>
+                                    <button onClick={startVoiceControl} className="w-full py-2 rounded-lg bg-blue-500 text-white text-sm">
+                                        <i className="fas fa-microphone mr-1"></i>语音指令
+                                    </button>
+                                    {voiceStatus && <p className="text-xs text-gray-500">{voiceStatus}</p>}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </>
@@ -3413,7 +3729,7 @@
                                 <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                                     <i className="fas fa-utensils text-white"></i>
                                 </div>
-                                <h1 className="text-white font-bold">菜谱管理</h1>
+                                <h1 className="text-white font-bold">快来吃饭</h1>
                             </div>
                             <nav className="mt-4">
                                 <div className="px-3 space-y-1">
